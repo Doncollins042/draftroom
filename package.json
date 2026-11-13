@@ -1,0 +1,40 @@
+{
+  "name": "draftroom",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio",
+    "ingest": "tsx scripts/ingest-whatsapp.ts",
+    "operator": "tsx scripts/create-operator.ts",
+    "worker": "tsx scripts/embed-worker.ts",
+    "db:local": "tsx scripts/dev-db.ts",
+    "seed": "tsx scripts/seed-demo.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
+    "@pinecone-database/pinecone": "^8.0.0",
+    "@prisma/client": "^6.8.0",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^17.4.2",
+    "next": "^15.3.0",
+    "next-auth": "^5.0.0-beta.31",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.1.0",
+    "embedded-postgres": "^18.4.0-beta.17",
+    "prisma": "^6.8.0",
+    "tailwindcss": "^4.1.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}

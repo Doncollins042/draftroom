@@ -1,0 +1,127 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Operator {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String
+  passwordHash String // bcrypt — set via scripts/create-operator.ts
+  role         String    @default("agent") // agent | admin
+  createdAt    DateTime  @default(now())
+  drafts       Draft[]
+  messages     Message[]
+}
+
+// One row per WhatsApp contact ("client"). Per-client voice settings live here —
+// these are what the console's Client settings tab edits.
+model Client {
+  id            String         @id @default(uuid())
+  waId          String         @unique // WhatsApp phone number id (wa_id from webhook)
+  displayName   String?
+  notes         String?
+  tags          String[]       @default([])
+  assistantMode Boolean        @default(false) // disclosed AI auto-replies for routine messages
+  emotion       String         @default("warm") // warm | flirty | playful | professional | reassuring
+  energy        Int            @default(60) // 0-100, punctuation intensity
+  emojiDensity  Int            @default(2) // 0-3
+  replyLength   String         @default("short") // short | long
+  goal          String         @default("rapport") // rapport | reengage | upsell | retention
+  lastInboundAt DateTime? // drives the 24h service-window check
+  conversations Conversation[]
+  exemplars     ExemplarPair[]
+}
+
+model Conversation {
+  id            String    @id @default(uuid())
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id])
+  status        String    @default("open") // open | needs_reply | closed
+  lastMessageAt DateTime?
+  messages      Message[]
+  drafts        Draft[]
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  waMessageId    String?      @unique // Cloud API message id — idempotency + status updates
+  direction      String // inbound | outbound
+  body           String
+  source         String       @default("live") // live | import | assistant
+  aiGenerated    Boolean      @default(false) // true only for disclosed assistant sends
+  status         String? // sent | delivered | read | failed (from status webhooks)
+  sentById       String?
+  sentBy         Operator?    @relation(fields: [sentById], references: [id])
+  sentAt         DateTime     @default(now())
+
+  @@index([conversationId, sentAt])
+}
+
+// The unit that gets embedded: an inbound message paired with the reply that
+// was actually sent. Retrieval = "how did this voice answer messages like this".
+model ExemplarPair {
+  id            String    @id @default(uuid())
+  clientId      String?
+  client        Client?   @relation(fields: [clientId], references: [id])
+  inboundText   String
+  replyText     String
+  contextWindow String?
+  qualityScore  Float     @default(0.5)
+  source        String    @default("import") // import | live_approved
+  vectorId      String?   @unique // id in Pinecone; null until embedded
+  embeddedAt    DateTime?
+}
+
+model Draft {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  variant        Int          @default(1)
+  model          String
+  promptVersion  String
+  retrievalRefs  Json // [{exemplarId, score}] — provenance for every suggestion
+  generatedText  String
+  finalText      String? // what the human actually approved/sent
+  status         String       @default("pending") // pending | approved | edited | rejected
+  reviewedById   String?
+  reviewedBy     Operator?    @relation(fields: [reviewedById], references: [id])
+  reviewedAt     DateTime?
+  editDistance   Float? // generated vs final — the core quality KPI
+  createdAt      DateTime     @default(now())
+}
+
+// Pre-approved WhatsApp templates (synced from Meta Business Manager) —
+// the only thing sendable outside the 24h service window.
+model Template {
+  id       String  @id @default(uuid())
+  name     String  @unique
+  language String  @default("en_US")
+  body     String
+  approved Boolean @default(false)
+}
+
+// Raw webhook payloads, kept for replay/debugging. Processing is idempotent
+// via Message.waMessageId, so replaying an event is safe.
+model WebhookEvent {
+  id          String    @id @default(uuid())
+  payload     Json
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  operatorId String?
+  action     String // draft_generated | draft_sent | assistant_replied | ...
+  entity     String
+  entityId   String?
+  meta       Json?
+  at         DateTime @default(now())
+}
